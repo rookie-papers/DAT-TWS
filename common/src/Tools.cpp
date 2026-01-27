@@ -97,6 +97,34 @@ void ECP2_mul(ECP2 &P2, const mpz_class &t) {
     ECP2_mul(&P2, t1);
 }
 
+void FP12_mulMy(FP12 &a, FP12 &b) {
+    FP12_mul(&a, &b);
+    FP12_reduce(&a);
+}
+
+void FP12_pow(FP12 &r, const mpz_class &exp) {
+    BIG exp_big;
+    mpz_to_BIG(exp, exp_big); // 转换指数
+    FP12_pow(&r, &r, exp_big);
+    FP12_reduce(&r);
+}
+
+void FP12_inv(FP12 &r) {
+    FP12_inv(&r, &r);
+    FP12_reduce(&r);
+}
+
+FP12 e(ECP P1, ECP2 P2) {
+    FP12 temp1;
+    PAIR_ate(&temp1, &P2, &P1);
+    PAIR_fexp(&temp1);
+    FP12_reduce(&temp1);
+    if (FP12_isunity(&temp1) || FP12_iszilch(&temp1)) {
+        printf("pairing error [temp1]\n");
+    }
+    return temp1;
+}
+
 void initState(gmp_randstate_t &state) {
     gmp_randinit_default(state);
     gmp_randseed_ui(state, duration_cast<nanoseconds>(high_resolution_clock::now().time_since_epoch()).count());
@@ -209,7 +237,7 @@ void show_mpz(mpz_t mpz) {
 
 octet getOctet(int maxLen) {
     octet S;
-    S.val = (char *) malloc(maxLen);
+    S.val = (char *) calloc(maxLen, sizeof(char));
     S.max = maxLen;
     S.len = 0;
     return S;
@@ -334,19 +362,6 @@ ECP hashToPoint(mpz_class big, mpz_class q) {
     mpz_to_BIG(q, tq);
     return hashToPoint(tb, tq);
 }
-
-
-FP12 e(ECP P1, ECP2 P2) {
-    FP12 temp1;
-    PAIR_ate(&temp1, &P2, &P1);
-    PAIR_fexp(&temp1);
-    FP12_reduce(&temp1);
-    if (FP12_isunity(&temp1) || FP12_iszilch(&temp1)) {
-        printf("pairing error [temp1]\n");
-    }
-    return temp1;
-}
-
 
 void BIG_inv(BIG &res, const BIG a, const BIG m) {
     BIG m0, x0, x1, one, a_back, module;

@@ -89,6 +89,12 @@ void ECP_mul(ECP& P1, const mpz_class& t);
  */
 void ECP2_mul(ECP2& P2, const mpz_class& t);
 
+void FP12_mulMy(FP12 &a, FP12 &b);
+
+void FP12_pow(FP12 &r, const mpz_class &exp);
+
+void FP12_inv(FP12 &r);
+
 /**
  * Initializes the random number generator in GMP
  * @param state Random number generator to be initialized
