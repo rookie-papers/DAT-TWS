@@ -1,7 +1,7 @@
 #ifndef ATO_SA_H
 #define ATO_SA_H
 
-#include "../../common/include/Tools.h"
+#include "Tools.h"
 #include <string>
 #include <vector>
 #include <iostream>

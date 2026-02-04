@@ -1,51 +1,43 @@
 cmake_minimum_required(VERSION 3.28)
-project(template-miracl-exp)
+project(DAT-TWS)
+
 set(CMAKE_CXX_STANDARD 17)
 
-# Build external libraries (e.g., MIRACL Core, GMP, Benchmark)
-add_subdirectory(external)
+# 1. External Dependencies (miracl-wrapper)
+include(FetchContent)
 
-# Include paths for common headers shared across all schemes
-include_directories(
-        ${CMAKE_SOURCE_DIR}/common/include
+FetchContent_Declare(
+        WrapperLib
+        GIT_REPOSITORY https://github.com/rookie-papers/miracl-wrapper.git
+        GIT_TAG        main
 )
 
-# Gather all common source files used by the schemes
-file(GLOB COMMON_SRC
-        ${CMAKE_SOURCE_DIR}/common/src/*.cpp
-)
+FetchContent_MakeAvailable(WrapperLib) # Download and populate the library
 
-# Function to define a benchmark target for a given signature scheme
+# 2. Build Function for Schemes
 function(add_scheme_executable name)
     set(SCHEME_DIR ${CMAKE_SOURCE_DIR}/${name})
 
-    # Collect all source files within the scheme's src/ directory
-    file(GLOB SCHEME_SRC
-            ${SCHEME_DIR}/src/*.cpp
-    )
+    # A. Gather source files
+    file(GLOB SCHEME_SRC "${SCHEME_DIR}/src/*.cpp")
 
-    # Add include paths for both the scheme-specific and common headers
-    include_directories(
+    # B. Define executable target
+    add_executable(${name}_exec ${SCHEME_SRC})
+
+    # C. Include directories. Note: WrapperLib headers are automatically included via linking
+    target_include_directories(${name}_exec PRIVATE
             ${SCHEME_DIR}/include
-            ${CMAKE_SOURCE_DIR}/common/include
     )
 
-    # Define the executable target with combined common and scheme sources
-    add_executable(${name}_exec
-            ${COMMON_SRC}
-            ${SCHEME_SRC}
-    )
-
-    # Link the target against required libraries: MIRACL Core, GMP, and Google Benchmark
-    target_link_libraries(${name}_exec
-            PRIVATE
-            miracl_core
-            gmp::gmp
-            gmp::gmpxx
+    # D. Link libraries. Links MIRACL, GMP, and Tools automatically via WrapperLib
+    target_link_libraries(${name}_exec PRIVATE
+            WrapperLib
             benchmark::benchmark
     )
+
+    message(STATUS "Configured scheme: ${name}")
 endfunction()
 
-# Define benchmark target for the RTS signature scheme
+# 3. Register Schemes
 add_scheme_executable(DAT-TWS)
 add_scheme_executable(IhMA)

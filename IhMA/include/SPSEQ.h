@@ -1,7 +1,7 @@
 #ifndef SPSEQ_H
 #define SPSEQ_H
 
-#include "../../common/include/Tools.h"
+#include "Tools.h"
 #include <vector>
 #include <iostream>
 
