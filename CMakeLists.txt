@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 project(DAT-TWS)
 
 set(CMAKE_CXX_STANDARD 17)
+set(FETCHCONTENT_UPDATES_DISCONNECTED ON) # Disable auto-update to prevent Git stash conflicts
 
 # 1. External Dependencies (miracl-wrapper)
 include(FetchContent)
@@ -41,3 +42,4 @@ endfunction()
 # 3. Register Schemes
 add_scheme_executable(DAT-TWS)
 add_scheme_executable(IhMA)
+add_scheme_executable(DTACB)
