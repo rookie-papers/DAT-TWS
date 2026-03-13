@@ -1,91 +1,92 @@
 #include "../include/IhMA.h"
 #include <iostream>
 #include <string>
+#include <benchmark/benchmark.h>
 
 using namespace std;
 
-int main() {
-    // ============================================
-    // 1. Initialization
-    // ============================================
-
-    // Initialize AtoSa RNG
-    initState(AtoSa::state_gmp);
-    initRNG(&AtoSa::rng);
-
-    // Initialize Spseq RNG
-    initState(Spseq::state_gmp);
-    initRNG(&Spseq::rng);
-
-    cout << "=== Running IhMA Full Protocol ===" << endl;
-
-    // 2. Setup
-    auto pp = IhMA::Setup();
-
-    int n_issuers = 5; // Change this value to test performance (e.g., 5, 10, 50)
-
-    // 3. Issuer Setup
-    vector<IhMA::IhMAIssuerKey> issuers(n_issuers);
-    vector<AtoSa::AtoSaVK> issuer_vks_only;
-    cout << "[Setup] Generating " << n_issuers << " Issuers..." << endl;
-    for(int i=0; i<n_issuers; ++i) {
-        IhMA::IKeyGen(pp, issuers[i]);
-        issuer_vks_only.push_back(issuers[i].ivk);
-    }
-
-    // 4. Regulator Setup (Gen-Policies)
-    Spseq::SpseqSK reg_sk;
-    Spseq::SpseqPK reg_pk;
-
-    // 5. Regulator Signs Policies
-    vector<IhMA::IhMAPolicy> policies;
-    IhMA::GenPolicies(pp, issuers, policies, reg_sk, reg_pk);
-
-    // 6. User Setup
-    IhMA::IhMAUserKey uk;
-
-    // Dynamically generate attribute list based on n_issuers
-    vector<string> attributes;
-    for(int i = 0; i < n_issuers; ++i) {
-        attributes.push_back("Attribute_" + to_string(i));
-    }
-
-    IhMA::UKeyGen(pp, attributes, issuer_vks_only, uk);
-
-    // 7. Issuance
-    vector<IhMA::IhMACredential> credentials;
-    for(int i=0; i<n_issuers; ++i) {
-        IhMA::IhMACredential cred;
-        IhMA::Issuance(pp, issuers[i], uk, attributes[i], cred);
-        credentials.push_back(cred);
-    }
-
-    // 8. Show (Prover)
-    // Dynamically generate disclosure set D (Revealing all attributes here)
-    vector<int> D;
-    for(int i = 0; i < n_issuers; ++i) {
-        D.push_back(i);
-    }
-
-    auto proof = IhMA::Show(pp, uk, credentials, policies, D);
-
-    // 9. Verify (Verifier)
-    // Verifier reconstructs the list of revealed attribute values based on D
-    vector<string> revealed_attributes;
-    for(int idx : D) {
-        revealed_attributes.push_back(attributes[idx]);
-    }
-
-    bool result = IhMA::CredVerify(pp, reg_pk, proof, revealed_attributes);
-
-    if(result) {
-        cout << ">>> IhMA Protocol Result: PASS" << endl;
-    } else {
-        cout << ">>> IhMA Protocol Result: FAIL" << endl;
-    }
-
-    return 0;
-}
+//int main() {
+//    // ============================================
+//    // 1. Initialization
+//    // ============================================
+//
+//    // Initialize AtoSa RNG
+//    initState(AtoSa::state_gmp);
+//    initRNG(&AtoSa::rng);
+//
+//    // Initialize Spseq RNG
+//    initState(Spseq::state_gmp);
+//    initRNG(&Spseq::rng);
+//
+//    cout << "=== Running IhMA Full Protocol ===" << endl;
+//
+//    // 2. Setup
+//    auto pp = IhMA::Setup();
+//
+//    int n_issuers = 5; // Change this value to test performance (e.g., 5, 10, 50)
+//
+//    // 3. Issuer Setup
+//    vector<IhMA::IhMAIssuerKey> issuers(n_issuers);
+//    vector<AtoSa::AtoSaVK> issuer_vks_only;
+//    cout << "[Setup] Generating " << n_issuers << " Issuers..." << endl;
+//    for(int i=0; i<n_issuers; ++i) {
+//        IhMA::IKeyGen(pp, issuers[i]);
+//        issuer_vks_only.push_back(issuers[i].ivk);
+//    }
+//
+//    // 4. Regulator Setup (Gen-Policies)
+//    Spseq::SpseqSK reg_sk;
+//    Spseq::SpseqPK reg_pk;
+//
+//    // 5. Regulator Signs Policies
+//    vector<IhMA::IhMAPolicy> policies;
+//    IhMA::GenPolicies(pp, issuers, policies, reg_sk, reg_pk);
+//
+//    // 6. User Setup
+//    IhMA::IhMAUserKey uk;
+//
+//    // Dynamically generate attribute list based on n_issuers
+//    vector<string> attributes;
+//    for(int i = 0; i < n_issuers; ++i) {
+//        attributes.push_back("Attribute_" + to_string(i));
+//    }
+//
+//    IhMA::UKeyGen(pp, attributes, issuer_vks_only, uk);
+//
+//    // 7. Issuance
+//    vector<IhMA::IhMACredential> credentials;
+//    for(int i=0; i<n_issuers; ++i) {
+//        IhMA::IhMACredential cred;
+//        IhMA::Issuance(pp, issuers[i], uk, attributes[i], cred);
+//        credentials.push_back(cred);
+//    }
+//
+//    // 8. Show (Prover)
+//    // Dynamically generate disclosure set D (Revealing all attributes here)
+//    vector<int> D;
+//    for(int i = 0; i < n_issuers; ++i) {
+//        D.push_back(i);
+//    }
+//
+//    auto proof = IhMA::Show(pp, uk, credentials, policies, D);
+//
+//    // 9. Verify (Verifier)
+//    // Verifier reconstructs the list of revealed attribute values based on D
+//    vector<string> revealed_attributes;
+//    for(int idx : D) {
+//        revealed_attributes.push_back(attributes[idx]);
+//    }
+//
+//    bool result = IhMA::CredVerify(pp, reg_pk, proof, revealed_attributes);
+//
+//    if(result) {
+//        cout << ">>> IhMA Protocol Result: PASS" << endl;
+//    } else {
+//        cout << ">>> IhMA Protocol Result: FAIL" << endl;
+//    }
+//
+//    return 0;
+//}
 
 
 
@@ -272,3 +273,231 @@ int main() {
 //
 //    return 0;
 //}
+
+
+
+
+// ---------------------------------------------------------
+// Helper to initialize RNG for all benchmarks
+// ---------------------------------------------------------
+static void InitRNGs() {
+    static bool initialized = false;
+    if (!initialized) {
+        // Initialize AtoSa RNG
+        initState(AtoSa::state_gmp);
+        initRNG(&AtoSa::rng);
+
+        // Initialize Spseq RNG
+        initState(Spseq::state_gmp);
+        initRNG(&Spseq::rng);
+
+        initialized = true;
+    }
+}
+
+// ---------------------------------------------------------
+// 1. Test Setup (System Initialization)
+// ---------------------------------------------------------
+static void BM_IhMA_Setup(benchmark::State &state) {
+    InitRNGs();
+
+    for (auto _ : state) {
+        auto pp = IhMA::Setup();
+    }
+}
+
+// ---------------------------------------------------------
+// 2. Test IKeyGen (Single Issuer Key Generation)
+// ---------------------------------------------------------
+static void BM_IhMA_IKeyGen(benchmark::State &state) {
+    InitRNGs();
+    auto pp = IhMA::Setup();
+    IhMA::IhMAIssuerKey ik;
+
+    for (auto _ : state) {
+        IhMA::IKeyGen(pp, ik);
+    }
+}
+
+// ---------------------------------------------------------
+// 3. Test GenPolicies (Regulator signing policies for N issuers)
+// ---------------------------------------------------------
+static void BM_IhMA_GenPolicies(benchmark::State &state) {
+    InitRNGs();
+    auto pp = IhMA::Setup();
+    int n_issuers = state.range(0);
+
+    vector<IhMA::IhMAIssuerKey> issuers(n_issuers);
+    for(int i = 0; i < n_issuers; ++i) {
+        IhMA::IKeyGen(pp, issuers[i]);
+    }
+
+    Spseq::SpseqSK reg_sk;
+    Spseq::SpseqPK reg_pk;
+    vector<IhMA::IhMAPolicy> policies;
+
+    for (auto _ : state) {
+        IhMA::GenPolicies(pp, issuers, policies, reg_sk, reg_pk);
+    }
+}
+
+// ---------------------------------------------------------
+// 4. Test UKeyGen (User Key Generation with N attributes)
+// ---------------------------------------------------------
+static void BM_IhMA_UKeyGen(benchmark::State &state) {
+    InitRNGs();
+    auto pp = IhMA::Setup();
+    int n_issuers = state.range(0);
+
+    vector<IhMA::IhMAIssuerKey> issuers(n_issuers);
+    vector<AtoSa::AtoSaVK> issuer_vks_only;
+    vector<string> attributes;
+
+    // Prepare prerequisites outside the timing loop
+    for(int i = 0; i < n_issuers; ++i) {
+        IhMA::IKeyGen(pp, issuers[i]);
+        issuer_vks_only.push_back(issuers[i].ivk);
+        attributes.push_back("Attribute_" + to_string(i));
+    }
+
+    IhMA::IhMAUserKey uk;
+
+    for (auto _ : state) {
+        IhMA::UKeyGen(pp, attributes, issuer_vks_only, uk);
+    }
+}
+
+// ---------------------------------------------------------
+// 5. Test Issuance (Single Credential Issuance)
+// ---------------------------------------------------------
+static void BM_IhMA_Issuance(benchmark::State &state) {
+    InitRNGs();
+    auto pp = IhMA::Setup();
+
+    IhMA::IhMAIssuerKey ik;
+    IhMA::IKeyGen(pp, ik);
+
+    vector<AtoSa::AtoSaVK> ivks = {ik.ivk};
+    vector<string> attrs = {"Attribute_0"};
+
+    IhMA::IhMAUserKey uk;
+    IhMA::UKeyGen(pp, attrs, ivks, uk);
+
+    IhMA::IhMACredential cred;
+
+    for (auto _ : state) {
+        IhMA::Issuance(pp, ik, uk, attrs[0], cred);
+    }
+}
+
+// ---------------------------------------------------------
+// 6. Test Show (Prover generates proof revealing all N attributes)
+// ---------------------------------------------------------
+static void BM_IhMA_Show(benchmark::State &state) {
+    InitRNGs();
+    auto pp = IhMA::Setup();
+    int n_issuers = state.range(0);
+
+    // Setup Issuers and Policies
+    vector<IhMA::IhMAIssuerKey> issuers(n_issuers);
+    vector<AtoSa::AtoSaVK> issuer_vks_only;
+    vector<string> attributes;
+    for(int i = 0; i < n_issuers; ++i) {
+        IhMA::IKeyGen(pp, issuers[i]);
+        issuer_vks_only.push_back(issuers[i].ivk);
+        attributes.push_back("Attribute_" + to_string(i));
+    }
+
+    Spseq::SpseqSK reg_sk;
+    Spseq::SpseqPK reg_pk;
+    vector<IhMA::IhMAPolicy> policies;
+    IhMA::GenPolicies(pp, issuers, policies, reg_sk, reg_pk);
+
+    // Setup User and Credentials
+    IhMA::IhMAUserKey uk;
+    IhMA::UKeyGen(pp, attributes, issuer_vks_only, uk);
+
+    vector<IhMA::IhMACredential> credentials;
+    for(int i = 0; i < n_issuers; ++i) {
+        IhMA::IhMACredential cred;
+        IhMA::Issuance(pp, issuers[i], uk, attributes[i], cred);
+        credentials.push_back(cred);
+    }
+
+    // Prepare disclosure set D (Revealing all attributes to test max overhead)
+    vector<int> D;
+    for(int i = 0; i < n_issuers; ++i) {
+        D.push_back(i);
+    }
+
+    for (auto _ : state) {
+        auto proof = IhMA::Show(pp, uk, credentials, policies, D);
+    }
+}
+
+// ---------------------------------------------------------
+// 7. Test CredVerify (Verifier checks proof with N attributes)
+// ---------------------------------------------------------
+static void BM_IhMA_CredVerify(benchmark::State &state) {
+    InitRNGs();
+    auto pp = IhMA::Setup();
+    int n_issuers = state.range(0);
+
+    // Setup Issuers and Policies
+    vector<IhMA::IhMAIssuerKey> issuers(n_issuers);
+    vector<AtoSa::AtoSaVK> issuer_vks_only;
+    vector<string> attributes;
+    for(int i = 0; i < n_issuers; ++i) {
+        IhMA::IKeyGen(pp, issuers[i]);
+        issuer_vks_only.push_back(issuers[i].ivk);
+        attributes.push_back("Attribute_" + to_string(i));
+    }
+
+    Spseq::SpseqSK reg_sk;
+    Spseq::SpseqPK reg_pk;
+    vector<IhMA::IhMAPolicy> policies;
+    IhMA::GenPolicies(pp, issuers, policies, reg_sk, reg_pk);
+
+    // Setup User and Credentials
+    IhMA::IhMAUserKey uk;
+    IhMA::UKeyGen(pp, attributes, issuer_vks_only, uk);
+
+    vector<IhMA::IhMACredential> credentials;
+    for(int i = 0; i < n_issuers; ++i) {
+        IhMA::IhMACredential cred;
+        IhMA::Issuance(pp, issuers[i], uk, attributes[i], cred);
+        credentials.push_back(cred);
+    }
+
+    // Prover generates proof
+    vector<int> D;
+    vector<string> revealed_attributes;
+    for(int i = 0; i < n_issuers; ++i) {
+        D.push_back(i);
+        revealed_attributes.push_back(attributes[i]);
+    }
+    auto proof = IhMA::Show(pp, uk, credentials, policies, D);
+
+    for (auto _ : state) {
+        bool res = IhMA::CredVerify(pp, reg_pk, proof, revealed_attributes);
+    }
+}
+
+// ---------------------------------------------------------
+// Register all Benchmark tests
+// ---------------------------------------------------------
+// Note: Functions that don't scale with n_issuers don't need Args
+BENCHMARK(BM_IhMA_Setup);
+BENCHMARK(BM_IhMA_IKeyGen);
+BENCHMARK(BM_IhMA_Issuance);
+
+// Note: Functions that scale with n_issuers are tested at 4, 8, 16, and 32
+BENCHMARK(BM_IhMA_GenPolicies)->Arg(4)->Arg(8)->Arg(16)->Arg(32)->Iterations(66);
+BENCHMARK(BM_IhMA_UKeyGen)->Arg(4)->Arg(8)->Arg(16)->Arg(32)->Iterations(66);
+BENCHMARK(BM_IhMA_Show)->Arg(4)->Arg(8)->Arg(16)->Arg(32)->Iterations(66);
+BENCHMARK(BM_IhMA_CredVerify)->Arg(4)->Arg(8)->Arg(16)->Arg(32)->Iterations(66);
+
+// ---------------------------------------------------------
+// Benchmark main entry point
+// ---------------------------------------------------------
+BENCHMARK_MAIN();

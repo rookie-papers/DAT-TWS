@@ -357,7 +357,7 @@ namespace DatTws {
         }
 
         // ============================================
-        // 0. Verify Timestamps (New Check)
+        // 0. Verify Timestamps
         // ============================================
         time_t now = time(nullptr);
         mpz_class current_time_mpz = (unsigned long)now;
@@ -372,7 +372,7 @@ namespace DatTws {
                 return false;
             }
         }
-        cout << "[Verify] 1. Timestamp Verification Passed." << endl;
+//        cout << "[Verify] 1. Timestamp Verification Passed." << endl;
 
         int n = tags.size();
 
@@ -413,7 +413,7 @@ namespace DatTws {
             cout << "ZK Proof Verification Failed." << endl;
             return false;
         }
-        cout << "[Verify] 2. Zero-Knowledge Proof (ZK) Passed." << endl;
+//        cout << "[Verify] 2. Zero-Knowledge Proof (ZK) Passed." << endl;
 
         // 3. Verify Message Signature
         // Equation: e(sigma_x, Y) == hat_Z_x * e( (Sum(T_vk))^h, PK_U' )
@@ -453,53 +453,75 @@ namespace DatTws {
             cout << "Signature Verification Failed." << endl;
             return false;
         }
-        cout << "[Verify] 3. Message Signature Verification Passed." << endl;
+//        cout << "[Verify] 3. Message Signature Verification Passed." << endl;
+
+        return true;
+    }
+
+    bool parVerify(DatParams pp, DatSignature sig, vector<DatTag> tags, string msg) {
+        if (tags.empty()) {
+            cout << "Verify Error: No tags provided." << endl;
+            return false;
+        }
+
+        // ============================================
+        // 0. Verify Timestamps
+        // ============================================
+        time_t now = time(nullptr);
+        mpz_class current_time_mpz = (unsigned long)now;
+
+        for(size_t i = 0; i < tags.size(); ++i) {
+            if (current_time_mpz >= tags[i].T_exp) {
+                cout << "Verify Error: Tag[" << i << "] has expired!" << endl;
+                cout << "  Current Time: ";
+                show_mpz(current_time_mpz.get_mpz_t());
+                cout << "  Expire Time:  ";
+                show_mpz(tags[i].T_exp.get_mpz_t());
+                return false;
+            }
+        }
+
+        // 1. Verify Message Signature
+        // Equation: e(sigma_x, Y) == hat_Z_x * e( (Sum(T_vk))^h, PK_U' )
+        vector<ECP> T_vks;
+        for(auto& tag : tags) T_vks.push_back(tag.T_vk);
+
+        mpz_class h = H2(msg, sig.hat_Z_x, T_vks);
+
+        // 1.2 Compute LHS: e(sigma_x, Y)
+        FP12 LHS_sig = e(sig.sigma_x, pp.Y_tilde);
+
+        // 1.3 Compute RHS: hat_Z_x * e( T_vk_agg * h, PK_U' )
+
+        // Step A: Sum(T_vk)
+        ECP T_vk_agg;
+        ECP_copy(&T_vk_agg, &tags[0].T_vk);
+        for(int i=1; i<tags.size(); ++i) {
+            ECP_add(&T_vk_agg, &tags[i].T_vk);
+        }
+
+        // Step B: (Sum(T_vk))^h
+        ECP_mul(T_vk_agg, h);  // 使用计算出来的 h
+
+        // Step C: Pairing e( ..., PK_U_tilde_r )
+        FP12 pair_part = e(T_vk_agg, sig.PK_U_tilde_r);
+
+        // Step D: hat_Z_x * Pairing
+        FP12 RHS_sig;
+        FP12_copy(&RHS_sig, &sig.hat_Z_x);
+        FP12_mulMy(RHS_sig, pair_part);
+
+        // 1.4 Compare
+        FP12_reduce(&LHS_sig);
+        FP12_reduce(&RHS_sig);
+
+        if (!FP12_equals(&LHS_sig, &RHS_sig)) {
+            cout << "Signature Verification Failed." << endl;
+            return false;
+        }
 
         return true;
     }
 
 
 } // namespace DatTws
-
-
-#include "dat-tws.h"
-
-// ================= Main =================
-
-int main() {
-    // 1. Initialize environment
-    initState(DatTws::state_gmp);
-    initRNG(&DatTws::rng);
-
-    cout << "=== Running DAT-TWS Protocol ===" << endl;
-
-    int t_num = 5; // Number of issuers for aggregation test
-
-    // 2. Setup
-    auto pp = DatTws::Setup();
-    DatTws::DatOpener opener;
-    vector<DatTws::DatIssuer> issuers;
-    DatTws::DatUser user;
-
-    // 3. KeyGen
-    DatTws::KeyGen(pp, opener, issuers, t_num, user);
-
-    // 4. TagGen & WitGen
-    // Note: WitGen automatically pushes the generated Tag, Witness, and T_sk into the user's vectors
-    for(int i = 0; i < t_num; ++i) {
-        auto tag = DatTws::TagGen(pp, issuers[i], user, opener);
-        DatTws::WitGen(pp, issuers[i], user, tag);
-    }
-
-    // 5. Sign
-    string msg = "Hello World";
-    auto sig = DatTws::Sign(pp, user, msg);
-
-    // 6. Verify
-    // Note: The randomized PK_U is included in the signature, so we verify against that
-    bool pass = DatTws::Verify(pp, sig, user.tags, msg);
-
-    cout << "Verify Result: " << (pass ? "PASS" : "FAIL") << endl;
-
-    return 0;
-}

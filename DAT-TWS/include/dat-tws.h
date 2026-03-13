@@ -149,6 +149,21 @@ namespace DatTws {
      */
     bool Verify(DatParams pp, DatSignature sig, vector<DatTag> tags, string msg);
 
+    /**
+     * @brief Partial Verification algorithm for cached/trusted credentials.
+     * * If a specific tag has already been verified by the verifier, since only the
+     * user corresponding to that tag possesses the associated witness, we can safely
+     * skip the Zero-Knowledge Proof (ZK) verification. By directly checking the
+     * validity of the message signature against these known tags, this algorithm
+     * significantly reduces the computational overhead for subsequent authentications.
+     * @param pp System public parameters.
+     * @param sig The signature to verify.
+     * @param tags The vector of tags corresponding to the signature.
+     * @param msg The signed message.
+     * @return True if the partial signature verification succeeds; otherwise, false.
+     */
+    bool parVerify(DatParams pp, DatSignature sig, vector<DatTag> tags, string msg);
+
     // ------------------------------
     // Helper / Hash Functions
     // ------------------------------
