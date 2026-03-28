@@ -7,7 +7,7 @@ namespace VerifierNode {
     // ============================================================
     // Network Configuration (Modify these for distributed testing)
     // ============================================================
-    const std::string REGULATOR_IP = "127.0.0.1";
+    const std::string REGULATOR_IP = "10.0.0.10";
     const std::string REGULATOR_PORT = "9002";
     const std::string REGULATOR_URI = "ws://" + REGULATOR_IP + ":" + REGULATOR_PORT;
 

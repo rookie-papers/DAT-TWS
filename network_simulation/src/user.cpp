@@ -8,14 +8,15 @@ namespace UserNode {
     // ============================================================
     // Network Configuration (Modify these for distributed testing)
     // ============================================================
-    const std::string REGULATOR_IP = "127.0.0.1";
+    const std::string REGULATOR_IP = "10.0.0.10";
     const std::string REGULATOR_PORT = "9002";
     const std::string REGULATOR_URI = "ws://" + REGULATOR_IP + ":" + REGULATOR_PORT;
 
-    const std::string VERIFIER_IP = "127.0.0.1";
+    const std::string VERIFIER_IP = "10.0.0.20";
     const std::string VERIFIER_PORT = "9003";
 
-    const std::string DEFAULT_ISSUER_IP = "127.0.0.1";
+    // The base IP prefix for all Issuers
+    const std::string ISSUER_SUBNET_PREFIX = "10.0.0.";
 
     // ============================================================
     // Global State Initialization
@@ -193,20 +194,21 @@ namespace UserNode {
         // ================= START TIMING: ISSUANCE =================
         auto t_issue_start = std::chrono::high_resolution_clock::now();
 
-        // 2. Issuance Phase: Dynamically generate the list of Issuer ports
+        // 2. Issuance Phase: Dynamically generate the list of Issuer IPs
         std::cout << "\n[User] Starting Issuance Phase with " << num_issuers << " Issuers..." << std::endl;
-        std::vector<int> issuer_ports;
-        for (int i = 0; i < num_issuers; ++i) {
-            issuer_ports.push_back(base_port + i);
+        std::vector<std::string> issuer_ips;
+        for (int i = 1; i <= num_issuers; ++i) {
+            // Generates 10.0.0.101, 10.0.0.102, etc.
+            issuer_ips.push_back(ISSUER_SUBNET_PREFIX + std::to_string(100 + i));
         }
 
         // Sequentially request certificates from each configured Issuer
-        for (int port : issuer_ports) {
-            if (obtainCertificateFromIssuer(DEFAULT_ISSUER_IP, port) != 0) {
-                std::cerr << "[User Error] Failed to get certificate from port " << port << ". Skipping." << std::endl;
+        // Note: We use the base_port since they can all bind to 8001 inside their own namespaces
+        for (const std::string& ip : issuer_ips) {
+            if (obtainCertificateFromIssuer(ip, base_port) != 0) {
+                std::cerr << "[User Error] Failed to get certificate from " << ip << ". Skipping." << std::endl;
             }
         }
-
         // Ensure we obtained at least one certificate before proceeding
         if (user_keys.tags.empty()) {
             std::cerr << "[User Error] No certificates obtained. Aborting." << std::endl;
