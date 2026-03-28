@@ -128,7 +128,7 @@ namespace DatTws {
      * @param user The user receiving the witness (updated in-place).
      * @param tag The tag to be signed.
      */
-    void WitGen(DatParams pp, DatIssuer issuer, DatUser& user, DatTag tag);
+    void WitGen(DatParams pp, DatIssuer issuer, DatUser& user, DatTag tag, DatOpener opener);
 
     /**
      * @brief Signing algorithm to generate an aggregated signature on a message.
@@ -167,6 +167,11 @@ namespace DatTws {
     // ------------------------------
     // Helper / Hash Functions
     // ------------------------------
+
+    /**
+     * @brief Simulated pseudo-random function f used by Regulator to compute H_u.
+     */
+    mpz_class f_hash(mpz_class rsk, ECP2 PK_U);
 
     /**
      * @brief Hash function H1 used for generating T_vk.

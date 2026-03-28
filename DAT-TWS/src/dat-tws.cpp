@@ -13,6 +13,30 @@ namespace DatTws {
 
 // ================= Hash Functions =================
 
+// f: Hash function for Regulator to compute H_u = X^{f(rsk, PK_U)}
+    mpz_class f_hash(mpz_class rsk, ECP2 PK_U) {
+        octet hash = getOctet(2048);
+        octet temp = getOctet(1024);
+
+        // Convert rsk to string/bytes
+        string rsk_str = rsk.get_str(16);
+        temp.len = rsk_str.length();
+        memcpy(temp.val, rsk_str.c_str(), temp.len);
+        concatOctet(&hash, &temp);
+
+        ECP2_toOctet(&temp, &PK_U, true);
+        concatOctet(&hash, &temp);
+
+        BIG order, ret;
+        BIG_rcopy(order, CURVE_Order);
+        hashZp256(ret, &hash, order);
+
+        free(hash.val);
+        free(temp.val);
+
+        return BIG_to_mpz(ret);
+    }
+
 // H1: Hash for T_vk generation
     mpz_class H1(ECP Xt, ECP2 Yt, FP12 pairing_res) {
         octet hash = getOctet(2048);
@@ -205,29 +229,30 @@ namespace DatTws {
     }
 
     // WitGen: Generate Witness and store in User Vector
-    void WitGen(DatParams pp, DatIssuer issuer, DatUser& user, DatTag tag) {
+    void WitGen(DatParams pp, DatIssuer issuer, DatUser& user, DatTag tag, DatOpener opener) {
         DatWitness wit;
 
-        // 1. User Blinding
-        mpz_class d = rand_mpz(state_gmp);
-        ECP H_blind;
-        ECP_copy(&H_blind, &user.H);
-        ECP_mul(H_blind, d); // H_i = H^d
+        // 1. Regulator computes H_u = f(rsk, PK_U)
+        mpz_class h_u_val = f_hash(opener.rsk, user.PK_U);
+        ECP H_u;
+        ECP_copy(&H_u, &pp.X);
+        ECP_mul(H_u, h_u_val); // H_u = X^{f(rsk, PK_U)}
 
-        // 2. Issuer Signing (sigma = H_i^{a + b * m})
+        // User records H_u as their base H (Overwrites the random H from KeyGen)
+        ECP_copy(&user.H, &H_u);
+
+        // 2. Issuer computes certificate sigma_i = H_u^{a_i + b_i * H_Tag(T_i)}
         mpz_class m = H_Tag(tag);
         mpz_class sig_exp = (issuer.a + issuer.b * m) % pp.q;
 
-        ECP sigma_blind;
-        ECP_copy(&sigma_blind, &H_blind);
-        ECP_mul(sigma_blind, sig_exp);
+        ECP sigma_i;
+        ECP_copy(&sigma_i, &H_u);
+        ECP_mul(sigma_i, sig_exp);
 
-        // 3. User Unblinding
-        mpz_class d_inv = invert_mpz(d, pp.q);
-        ECP_copy(&wit.sigma_prime, &sigma_blind);
-        ECP_mul(wit.sigma_prime, d_inv); // sigma_i'
+        // User gains witness sigma_i
+        ECP_copy(&wit.sigma_prime, &sigma_i);
 
-        // 4. Derive T_sk = T_vk ^ usk
+        // 3. User derive T_sk = T_vk ^ usk
         ECP tsk_temp;
         ECP_copy(&tsk_temp, &tag.T_vk);
         ECP_mul(tsk_temp, user.usk);

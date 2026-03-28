@@ -15,6 +15,10 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(WrapperLib) # Download and populate the library
 
+# Build external libraries
+add_subdirectory(external)
+add_subdirectory(protocol_simulation)
+
 # 2. Build Function for Schemes
 function(add_scheme_executable name)
     set(SCHEME_DIR ${CMAKE_SOURCE_DIR}/${name})

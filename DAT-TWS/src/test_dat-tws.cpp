@@ -7,43 +7,43 @@ using namespace std;
 
 // ================= Main =================
 
-//int main() {
-//    // 1. Initialize environment
-//    initState(DatTws::state_gmp);
-//    initRNG(&DatTws::rng);
-//
-//    cout << "=== Running DAT-TWS Protocol ===" << endl;
-//
-//    int t_num = 5; // Number of issuers for aggregation test
-//
-//    // 2. Setup
-//    auto pp = DatTws::Setup();
-//    DatTws::DatOpener opener;
-//    vector<DatTws::DatIssuer> issuers;
-//    DatTws::DatUser user;
-//
-//    // 3. KeyGen
-//    DatTws::KeyGen(pp, opener, issuers, t_num, user);
-//
-//    // 4. TagGen & WitGen
-//    // Note: WitGen automatically pushes the generated Tag, Witness, and T_sk into the user's vectors
-//    for(int i = 0; i < t_num; ++i) {
-//        auto tag = DatTws::TagGen(pp, issuers[i], user, opener);
-//        DatTws::WitGen(pp, issuers[i], user, tag);
-//    }
-//
-//    // 5. Sign
-//    string msg = "Hello World";
-//    auto sig = DatTws::Sign(pp, user, msg);
-//
-//    // 6. Verify
-//    // Note: The randomized PK_U is included in the signature, so we verify against that
-//    bool pass = DatTws::Verify(pp, sig, user.tags, msg);
-//    pass = pass && DatTws::parVerify(pp, sig, user.tags, msg);
-//    cout << "Verify Result: " << (pass ? "PASS" : "FAIL") << endl;
-//
-//    return 0;
-//}
+/*
+int main() {
+    // 1. Initialize environment
+    initState(DatTws::state_gmp);
+    initRNG(&DatTws::rng);
+
+    cout << "=== Running DAT-TWS Protocol ===" << endl;
+
+    int t_num = 5; // Number of issuers for aggregation test
+
+    // 2. Setup
+    auto pp = DatTws::Setup();
+    DatTws::DatOpener opener;
+    vector<DatTws::DatIssuer> issuers;
+    DatTws::DatUser user;
+
+    // 3. KeyGen
+    DatTws::KeyGen(pp, opener, issuers, t_num, user);
+
+    // 4. TagGen & WitGen
+    for(int i = 0; i < t_num; ++i) {
+        auto tag = DatTws::TagGen(pp, issuers[i], user, opener);
+        DatTws::WitGen(pp, issuers[i], user, tag, opener);
+    }
+
+    // 5. Sign
+    string msg = "Hello World";
+    auto sig = DatTws::Sign(pp, user, msg);
+
+    // 6. Verify
+    bool pass = DatTws::Verify(pp, sig, user.tags, msg);
+    pass = pass && DatTws::parVerify(pp, sig, user.tags, msg);
+    cout << "Verify Result: " << (pass ? "PASS" : "FAIL") << endl;
+
+    return 0;
+}
+*/
 
 
 // ---------------------------------------------------------
@@ -53,7 +53,7 @@ static void InitRNGs() {
     static bool initialized = false;
     if (!initialized) {
         initState(DatTws::state_gmp);
-        initRNG(&DatTws::rng);
+        // initRNG(&DatTws::rng);
         initialized = true;
     }
 }
@@ -109,7 +109,7 @@ static void BM_DatTws_TagGen_WitGen(benchmark::State &state) {
 
         for(int i = 0; i < t_num; ++i) {
             auto tag = DatTws::TagGen(pp, issuers[i], user, opener);
-            DatTws::WitGen(pp, issuers[i], user, tag);
+            DatTws::WitGen(pp, issuers[i], user, tag, opener);
         }
     }
 }
@@ -130,7 +130,7 @@ static void BM_DatTws_Sign(benchmark::State &state) {
 
     for(int i = 0; i < t_num; ++i) {
         auto tag = DatTws::TagGen(pp, issuers[i], user, opener);
-        DatTws::WitGen(pp, issuers[i], user, tag);
+        DatTws::WitGen(pp, issuers[i], user, tag, opener);
     }
 
     string msg = "Hello World Benchmark";
@@ -156,7 +156,7 @@ static void BM_DatTws_Verify(benchmark::State &state) {
 
     for(int i = 0; i < t_num; ++i) {
         auto tag = DatTws::TagGen(pp, issuers[i], user, opener);
-        DatTws::WitGen(pp, issuers[i], user, tag);
+        DatTws::WitGen(pp, issuers[i], user, tag, opener);
     }
 
     string msg = "Hello World Benchmark";
@@ -183,14 +183,14 @@ static void BM_DatTws_parVerify(benchmark::State &state) {
 
     for(int i = 0; i < t_num; ++i) {
         auto tag = DatTws::TagGen(pp, issuers[i], user, opener);
-        DatTws::WitGen(pp, issuers[i], user, tag);
+        DatTws::WitGen(pp, issuers[i], user, tag, opener);
     }
 
     string msg = "Hello World Benchmark";
     auto sig = DatTws::Sign(pp, user, msg);
 
     for (auto _ : state) {
-        bool pass = DatTws::Verify(pp, sig, user.tags, msg);
+        bool pass = DatTws::parVerify(pp, sig, user.tags, msg);
     }
 }
 
@@ -201,8 +201,8 @@ static void BM_DatTws_parVerify(benchmark::State &state) {
 // System setup doesn't scale with N, so no arguments needed
 BENCHMARK(BM_DatTws_Setup);
 
-// Protocol phases that scale with the number of issuers (t_
-// Testing typical scenarios: 4, 8, 16, and 32 aggregated issuers
+// Protocol phases that scale with the number of issuers
+// Testing typical scenarios: 5, 10, and 50 aggregated issuers
 BENCHMARK(BM_DatTws_KeyGen)->Arg(5)->Arg(10)->Arg(50)->Iterations(66);
 BENCHMARK(BM_DatTws_TagGen_WitGen)->Arg(5)->Arg(10)->Arg(50)->Iterations(66);
 BENCHMARK(BM_DatTws_Sign)->Arg(5)->Arg(10)->Arg(50)->Iterations(66);
