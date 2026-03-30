@@ -2,6 +2,9 @@
 #include <iostream>
 #include <stdexcept>
 #include <chrono>
+#include <thread>
+#include <mutex>
+#include <vector>
 
 namespace UserNode {
 
@@ -23,6 +26,7 @@ namespace UserNode {
     DatTws::DatParams pp;
     DatTws::DatOpener opener_pk;
     DatTws::DatUser user_keys;
+    std::mutex vector_mutex;
 
     // ============================================================
     // Synchronous WebSocket Request Helper
@@ -69,10 +73,10 @@ namespace UserNode {
     // ============================================================
     // Step 1: Registration with Regulator
     // ============================================================
-    int registerWithRegulator() {
-        std::cout << "[User] Connecting to Regulator for registration..." << std::endl;
+    int initializeSystem() {
+        std::cout << "[User] Connecting to Regulator to fetch system parameters..." << std::endl;
 
-        // 1.1 Fetch System Parameters
+        // 1.1 Fetch System Parameters ONLY
         std::string param_resp = syncWebsocketRequest(REGULATOR_URI, "GET_PARAMS");
         if (param_resp.empty()) {
             std::cerr << "[User Error] Failed to fetch parameters." << std::endl;
@@ -85,23 +89,13 @@ namespace UserNode {
             opener_pk = str_to_DatOpener(param_resp.substr(pos + 2));
         }
 
-        // 1.2 Generate local keys
+        // 1.2 Generate local keys (usk, PK_U)
         initState(DatTws::state_gmp);
         user_keys.usk = rand_mpz(DatTws::state_gmp);
         ECP2_copy(&user_keys.PK_U, &pp.Y_tilde);
         ECP2_mul(user_keys.PK_U, user_keys.usk);
-        std::cout << "[User] Generated local User keys (usk, PK_U)." << std::endl;
 
-        // 1.3 Fetch H_u from Regulator
-        std::string req_hu = "GET_HU||" + ECP2_to_str(user_keys.PK_U);
-        std::string hu_resp = syncWebsocketRequest(REGULATOR_URI, req_hu);
-        if (hu_resp.empty()) {
-            std::cerr << "[User Error] Failed to fetch H_u." << std::endl;
-            return -1;
-        }
-
-        user_keys.H = str_to_ECP(hu_resp);
-        std::cout << "[User] Registration complete. Base H_u received." << std::endl;
+        std::cout << "[User] System initialized. Generated local User keys (usk, PK_U)." << std::endl;
 
         return 0;
     }
@@ -121,20 +115,24 @@ namespace UserNode {
             return -1;
         }
 
-        // 2.2 Parse the response format: "<DatTag>||<Signature>"
-        size_t pos = resp.find("||");
-        if (pos == std::string::npos) {
+        // 2.2 Parse the new response format: "<DatTag>||<Signature>||<H_u>"
+        size_t pos1 = resp.find("||");
+        size_t pos2 = resp.find("||", pos1 + 2);
+
+        if (pos1 == std::string::npos || pos2 == std::string::npos) {
             std::cerr << "[User Error] Invalid payload format from Issuer." << std::endl;
             return -1;
         }
 
-        std::string tag_str = resp.substr(0, pos);
-        std::string sig_str = resp.substr(pos + 2);
+        std::string tag_str = resp.substr(0, pos1);
+        std::string sig_str = resp.substr(pos1 + 2, pos2 - pos1 - 2);
+        std::string hu_str  = resp.substr(pos2 + 2);
 
-        // Deserialize the Tag and the Signature (Witness)
+        // Deserialize the Tag, Signature (Witness), and H_u
         DatTws::DatTag tag = str_to_DatTag(tag_str);
         DatTws::DatWitness wit;
         wit.sigma_prime = str_to_ECP(sig_str);
+        user_keys.H = str_to_ECP(hu_str);
 
         // 2.3 Derive T_sk = T_vk ^ usk
         ECP tsk_temp;
@@ -142,11 +140,14 @@ namespace UserNode {
         ECP_mul(tsk_temp, user_keys.usk);
 
         // 2.4 Store into local vectors for future aggregation
-        user_keys.tags.push_back(tag);
-        user_keys.witnesses.push_back(wit);
-        user_keys.T_sk.push_back(tsk_temp);
+        {
+            std::lock_guard<std::mutex> lock(vector_mutex);
+            user_keys.tags.push_back(tag);
+            user_keys.witnesses.push_back(wit);
+            user_keys.T_sk.push_back(tsk_temp);
+        }
 
-        std::cout << "[User] Successfully obtained Tag and Certificate from Issuer " << issuer_port << "." << std::endl;
+        std::cout << "[User] Successfully obtained Tag, Certificate, and H_u from Issuer " << issuer_port << "." << std::endl;
         return 0;
     }
 
@@ -188,24 +189,35 @@ namespace UserNode {
 
     int run(int num_issuers, int base_port) {
         // 1. Setup Phase
-        if (registerWithRegulator() != 0) return -1;
+        if (initializeSystem() != 0) return -1;
 
         // ================= START TIMING: ISSUANCE =================
         auto t_issue_start = std::chrono::high_resolution_clock::now();
 
         // 2. Issuance Phase: Dynamically generate the list of Issuer ports
-        std::cout << "\n[User] Starting Issuance Phase with " << num_issuers << " Issuers..." << std::endl;
+        std::cout << "\n[User] Starting Issuance Phase with " << num_issuers << " Issuers (Concurrent Mode)..."
+                  << std::endl;
         std::vector<int> issuer_ports;
         for (int i = 0; i < num_issuers; ++i) {
             issuer_ports.push_back(base_port + i);
         }
 
-        // Sequentially request certificates from each configured Issuer
-        for (int port : issuer_ports) {
-            if (obtainCertificateFromIssuer(DEFAULT_ISSUER_IP, port) != 0) {
-                std::cerr << "[User Error] Failed to get certificate from port " << port << ". Skipping." << std::endl;
+        std::vector<std::thread> threads;
+        for (int port: issuer_ports) {
+            threads.push_back(std::thread([port]() {
+                if (obtainCertificateFromIssuer(DEFAULT_ISSUER_IP, port) != 0) {
+                    std::cerr << "[User Error] Failed to get certificate from port " << port << ". Skipping."
+                              << std::endl;
+                }
+            }));
+        }
+
+        for (auto &t: threads) {
+            if (t.joinable()) {
+                t.join();
             }
         }
+        // ===================================================
 
         // Ensure we obtained at least one certificate before proceeding
         if (user_keys.tags.empty()) {
@@ -227,7 +239,6 @@ namespace UserNode {
 
         return 0;
     }
-
 } // namespace UserNode
 
 
@@ -238,7 +249,7 @@ int main(int argc, char* argv[]) {
     // Parse command-line arguments:
     // Usage: ./user <num_issuers> <base_port>
     // Defaults: 3 Issuers, starting from port 8001
-    int num_issuers = (argc >= 2) ? std::stoi(argv[1]) : 3;
+    int num_issuers = (argc >= 2) ? std::stoi(argv[1]) : 5;
     int base_port   = (argc >= 3) ? std::stoi(argv[2]) : 8001;
 
     return UserNode::run(num_issuers, base_port);

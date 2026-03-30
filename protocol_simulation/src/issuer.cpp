@@ -104,7 +104,7 @@ namespace IssuerNode {
         return Hu;
     }
 
-// ============================================================
+    // ============================================================
     // Server Mode: Serve Users
     // ============================================================
     void serverOnMessage(Server* server, connection_hdl hdl, MsgServer msg) {
@@ -133,18 +133,16 @@ namespace IssuerNode {
             ECP_copy(&sigma_i, &H_u);
             ECP_mul(sigma_i, sig_exp);
 
-            // Step D: Send both the Tag and the Signature back to the User
-            std::string resp = DatTag_to_str(tag) + "||" + ECP_to_str(sigma_i);
+            // Step D: Send Tag, Signature, AND H_u back to the User
+            std::string resp = DatTag_to_str(tag) + "||" + ECP_to_str(sigma_i) + "||" + ECP_to_str(H_u);
 
             try {
                 server->send(hdl, resp, websocketpp::frame::opcode::text);
-                std::cout << "[Issuer " << my_port << "] Generated Tag and issued certificate for User." << std::endl;
-            } catch (const websocketpp::exception& e) {
+                std::cout << "[Issuer " << my_port << "] Generated Tag and issued certificate (with H_u) for User."
+                          << std::endl;
+            } catch (const websocketpp::exception &e) {
                 std::cerr << "[Issuer Error] Failed to send certificate: " << e.what() << std::endl;
             }
-        }
-        else {
-            std::cerr << "[Issuer Warning] Unknown request type." << std::endl;
         }
     }
 
