@@ -123,7 +123,16 @@ namespace IssuerNode {
             DatTws::DatTag tag = DatTws::TagGen(pp, issuer_keys, dummy_user, opener_pk);
 
             // Step B: Proxy the request to the Regulator to get H_u
+            auto t_issue_start = std::chrono::high_resolution_clock::now();
+
             ECP H_u = fetchHuFromRegulator(PK_U);
+
+            auto t_issue_end = std::chrono::high_resolution_clock::now();
+            auto issue_duration = std::chrono::duration_cast<std::chrono::milliseconds>(t_issue_end - t_issue_start).count();
+
+            std::cout << "\n=======================================================" << std::endl;
+            std::cout << ">>> Hu Request Time (incl. network): " << issue_duration << " ms <<<" << std::endl;
+            std::cout << "=======================================================\n" << std::endl;
 
             // Step C: Issuer computes certificate sigma_i = H_u^{a + b * m}
             mpz_class m = DatTws::H_Tag(tag);
