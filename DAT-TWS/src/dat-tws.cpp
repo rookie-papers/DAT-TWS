@@ -1,8 +1,4 @@
 #include "dat-tws.h"
-#include <iostream>
-#include <vector>
-#include <cstring>
-#include <ctime>
 
 using namespace std;
 
@@ -548,5 +544,173 @@ namespace DatTws {
         return true;
     }
 
+    // =========================================================================
+    //    ZK Proof Batch Verification (Handles s, c, R, H', sigma')
+    //    Overhead: M + 1 Pairings
+    // =========================================================================
+    bool batchVerifyZK(DatParams pp, vector<DatSignature> sigs, vector<vector<DatTag>> all_tags) {
+        int M = sigs.size();
+        if (M == 0 || all_tags.size() != M) return false;
+
+        // 1. Generate random factors delta_j to prevent cancellation attacks (128-bit is sufficient)
+        vector<mpz_class> deltas(M);
+        for(int j = 0; j < M; ++j) {
+            mpz_urandomb(deltas[j].get_mpz_t(), state_gmp, 128);
+        }
+
+        // Initialize accumulators
+        ECP G1_agg; ECP_inf(&G1_agg);        // For LHS: sum( delta * (s*H' - c*sigma') )
+        FP12 Mid_Pairings; FP12_one(&Mid_Pairings); // For LHS: prod( e(delta*c*H', K_agg) )
+        FP12 RHS; FP12_one(&RHS);          // For RHS: prod( R^delta )
+
+        for(int j = 0; j < M; ++j) {
+            // A. Reconstruct K_agg_j for the j-th user
+            ECP2 K_agg; ECP2_inf(&K_agg);
+            for(auto& tag : all_tags[j]) {
+                mpz_class m_i = H_Tag(tag);
+                ECP2 temp; ECP2_copy(&temp, &tag.B_tilde);
+                ECP2_mul(temp, m_i);
+                ECP2_add(&temp, &tag.A_tilde);
+                ECP2_add(&K_agg, &temp);
+            }
+            ECP2_affine(&K_agg);
+
+            // B. Verifier MUST recompute the challenge c_j to prevent forgery
+            mpz_class c_j = H3(K_agg, sigs[j].H_prime, sigs[j].sigma_prime, sigs[j].R);
+
+            // C. Precompute combined scalars
+            mpz_class s_delta = (sigs[j].s * deltas[j]) % pp.q;
+            mpz_class c_delta = (c_j * deltas[j]) % pp.q;
+
+            // D. Compute inner terms for G1_agg: (s_delta * H') - (c_delta * sigma')
+            ECP part1; ECP_copy(&part1, &sigs[j].H_prime); ECP_mul(part1, s_delta);
+            ECP part2; ECP_copy(&part2, &sigs[j].sigma_prime); ECP_mul(part2, c_delta);
+            ECP_sub(&part1, &part2);
+            ECP_add(&G1_agg, &part1); // Accumulate into global G1_agg
+
+            // E. Compute intermediate Pairing: e(c_delta * H', K_agg_j)
+            // Perform scalar multiplication in G1 first, which is much faster than exponentiation in GT
+            ECP H_prime_cdelta; ECP_copy(&H_prime_cdelta, &sigs[j].H_prime);
+            ECP_mul(H_prime_cdelta, c_delta);
+            FP12 pair_j = e(H_prime_cdelta, K_agg);
+            FP12_mulMy(Mid_Pairings, pair_j); // Accumulate product of pairings
+
+            // F. Accumulate product for RHS: R_j ^ delta_j
+            FP12 R_delta; FP12_copy(&R_delta, &sigs[j].R);
+            FP12_pow(R_delta, deltas[j]);
+            FP12_mulMy(RHS, R_delta);
+        }
+
+        // 2. Final Verification
+        // LHS = e(G1_agg, Y_tilde) * Mid_Pairings
+        FP12 LHS = e(G1_agg, pp.Y_tilde);
+        FP12_mulMy(LHS, Mid_Pairings);
+
+        if (!FP12_equals(&LHS, &RHS)) {
+            cout << "[Batch Verify] ZK Proof Batch Verification Failed!" << endl;
+            return false;
+        }
+        return true;
+    }
+
+    // =========================================================================
+    //    Message Signature Batch Verification (Handles sigma_x, Z_x, PK_U')
+    //    Overhead: M + 1 Pairings
+    // =========================================================================
+    bool batchParVerify(DatParams pp, vector<DatSignature> sigs, vector<vector<DatTag>> all_tags, vector<string> msgs) {
+        int M = sigs.size();
+        if (M == 0 || all_tags.size() != M || msgs.size() != M) return false;
+
+        // 0. Verify expiration timestamps for all tags
+        time_t now = time(nullptr);
+        mpz_class current_time_mpz = (unsigned long)now;
+        for(int j = 0; j < M; ++j) {
+            for(auto& tag : all_tags[j]) {
+                if (current_time_mpz >= tag.T_exp) {
+                    cout << "[Batch Verify] Error: Tag expired for user " << j << endl;
+                    return false;
+                }
+            }
+        }
+
+        // 1. Generate random factors delta_j for the Small Exponent Test
+        vector<mpz_class> deltas(M);
+        for(int j = 0; j < M; ++j) {
+            mpz_urandomb(deltas[j].get_mpz_t(), state_gmp, 128);
+        }
+
+        // 2. Compute LHS: Compressed into 1 Pairing
+        // LHS = e( sum(delta_j * sigma_x_j), Y_tilde )
+        ECP G1_agg; ECP_inf(&G1_agg);
+        for(int j = 0; j < M; ++j) {
+            ECP temp; ECP_copy(&temp, &sigs[j].sigma_x);
+            ECP_mul(temp, deltas[j]);
+            ECP_add(&G1_agg, &temp);
+        }
+        FP12 LHS = e(G1_agg, pp.Y_tilde);
+
+        // 3. Compute RHS: prod(Z_x^delta) * prod(e(delta * h * T_vk_agg, PK_U'))
+        FP12 RHS_Z; FP12_one(&RHS_Z);
+        FP12 RHS_Pairings; FP12_one(&RHS_Pairings);
+
+        for(int j = 0; j < M; ++j) {
+            // Accumulate product of Z_x^delta
+            FP12 Z_temp; FP12_copy(&Z_temp, &sigs[j].hat_Z_x);
+            FP12_pow(Z_temp, deltas[j]);
+            FP12_mulMy(RHS_Z, Z_temp);
+
+            // Extract all T_vks for Hash computation and accumulate them
+            vector<ECP> T_vks;
+            ECP T_vk_agg; ECP_copy(&T_vk_agg, &all_tags[j][0].T_vk);
+            T_vks.push_back(all_tags[j][0].T_vk);
+            for(int i = 1; i < all_tags[j].size(); ++i) {
+                T_vks.push_back(all_tags[j][i].T_vk);
+                ECP_add(&T_vk_agg, &all_tags[j][i].T_vk);
+            }
+
+            // Compute h_j = H2(msg, Z_x, {T_vk})
+            mpz_class h_j = H2(msgs[j], sigs[j].hat_Z_x, T_vks);
+
+            // Compute scalar multiplier: delta_j * h_j
+            mpz_class h_delta = (h_j * deltas[j]) % pp.q;
+
+            // Scale T_vk_agg by h_delta
+            ECP_mul(T_vk_agg, h_delta);
+
+            // Execute Pairing and accumulate the product
+            FP12 pair_j = e(T_vk_agg, sigs[j].PK_U_tilde_r);
+            FP12_mulMy(RHS_Pairings, pair_j);
+        }
+
+        // Combine RHS components: RHS = RHS_Z * RHS_Pairings
+        FP12 RHS; FP12_copy(&RHS, &RHS_Z);
+        FP12_mulMy(RHS, RHS_Pairings);
+
+        FP12_reduce(&LHS); FP12_reduce(&RHS);
+
+        if (!FP12_equals(&LHS, &RHS)) {
+            cout << "[Batch Verify] Message Signature Batch Verification Failed!" << endl;
+            return false;
+        }
+        return true;
+    }
+
+    // =========================================================================
+    // 3. Unified Batch Verification Interface (Combines ZK + Sigs)
+    //    Total Overhead: 2M + 2 Pairings (Down from 5M for sequential)
+    // =========================================================================
+    bool batchVerifyAll(DatParams pp, vector<DatSignature> sigs, vector<vector<DatTag>> all_tags, vector<string> msgs) {
+        // Step 1: Batch verify Zero-Knowledge Proofs (Privacy & Unforgeability)
+        if (!batchVerifyZK(pp, sigs, all_tags)) {
+            return false;
+        }
+
+        // Step 2: Batch verify Authorized Message Signatures
+        if (!batchParVerify(pp, sigs, all_tags, msgs)) {
+            return false;
+        }
+
+        return true;
+    }
 
 } // namespace DatTws

@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <cstring>
+#include <ctime>
 
 using namespace std;
 
@@ -209,6 +211,38 @@ namespace DatTws {
      * @return Hash output as a large integer.
      */
     mpz_class H_Tag(const DatTag& tag);
+
+    /**
+     * @brief Batch verifies the Zero-Knowledge proofs for multiple aggregated signatures.
+     * This ensures privacy and prevents forgery using a randomized small exponent test.
+     * @param pp The public parameters of the DAT-TWS system.
+     * @param sigs A vector of DatSignature objects containing the proofs.
+     * @param all_tags A 2D vector where each element is a vector of DatTags corresponding to a user's signature.
+     * @return True if all ZK proofs in the batch are valid, false otherwise.
+     */
+    bool batchVerifyZK(DatParams pp, vector<DatSignature> sigs, vector<vector<DatTag>> all_tags);
+
+    /**
+     * @brief Batch verifies the message signatures from multiple users concurrently.
+     * It compresses multiple pairings into a single verification equation using random exponents.
+     * @param pp The public parameters of the DAT-TWS system.
+     * @param sigs A vector of DatSignature objects containing the message signatures.
+     * @param all_tags A 2D vector where each element is a vector of DatTags corresponding to a user's signature.
+     * @param msgs A vector of string messages signed by the respective users.
+     * @return True if all message signatures in the batch are valid, false otherwise.
+     */
+    bool batchParVerify(DatParams pp, vector<DatSignature> sigs, vector<vector<DatTag>> all_tags, vector<string> msgs);
+
+    /**
+     * @brief An integrated interface to perform complete batch verification.
+     * It internally executes both ZK proof batch verification and message signature batch verification.
+     * @param pp The public parameters of the DAT-TWS system.
+     * @param sigs A vector of DatSignature objects.
+     * @param all_tags A 2D vector of DatTags.
+     * @param msgs A vector of string messages.
+     * @return True if the entire batch (ZK proofs + Signatures) is successfully verified, false otherwise.
+     */
+    bool batchVerifyAll(DatParams pp, vector<DatSignature> sigs, vector<vector<DatTag>> all_tags, vector<string> msgs);
 
 } // namespace DatTws
 
