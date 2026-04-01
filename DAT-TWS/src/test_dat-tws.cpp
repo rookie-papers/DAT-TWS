@@ -349,4 +349,4 @@ BENCHMARK(BM_DatTws_batchVerifyAll)->Arg(4)->Arg(8)->Arg(16)->Arg(32)->Arg(64)->
 // ---------------------------------------------------------
 // Benchmark main entry point
 // ---------------------------------------------------------
-//BENCHMARK_MAIN();
+BENCHMARK_MAIN();
